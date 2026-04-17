@@ -1,0 +1,9 @@
+PySide6>=6.6.0
+reportlab>=4.0.0
+SQLAlchemy>=2.0.0
+alembic>=1.13.0
+pdfplumber>=0.11.0
+# V2 — OCR:
+# pytesseract>=0.3.10
+# pdf2image>=1.17.0
+# rapidfuzz>=3.6.0
