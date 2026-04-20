@@ -1573,6 +1573,83 @@ class PedidoWidget(QWidget):
             if wv: wv.setValue(float(item.get("preco_vencedor",0)))
         self._recalc()
 
+    def preencher_da_cotacao(self, fornecedor: str, obra: str,
+                              empresa: str, itens: list):
+        """
+        Preenche o formulário a partir da aba Cotacao.
+        Chamado pelo cotacao_widget apos clicar em Gerar Pedido.
+
+        Parametros:
+            fornecedor : nome do fornecedor vencedor
+            obra       : nome da obra selecionada na cotacao
+            empresa    : empresa faturadora selecionada na cotacao
+            itens      : lista de dicts com chaves:
+                         descricao, quantidade, unidade,
+                         valor_unitario, valor_total
+        """
+        # Limpa tabela sem confirmacao
+        self.tabela.setRowCount(0)
+        self.lbl_subtotal.setText("Subtotal: R$ 0,00")
+        self.lbl_desconto_info.setVisible(False)
+        self.lbl_total.setText("TOTAL: R$ 0,00")
+        self._desconto_tipo = "%"
+        self.spin_desconto.blockSignals(True)
+        self.spin_desconto.setValue(0.0)
+        self.spin_desconto.blockSignals(False)
+
+        # Numero e data atualizados
+        self.e_num.setText(proximo_numero_pedido())
+        self.e_data.setText(datetime.now().strftime("%d/%m/%Y"))
+
+        # Obra
+        self.e_obra.blockSignals(True)
+        idx = self.e_obra.findText(obra)
+        if idx >= 0:
+            self.e_obra.setCurrentIndex(idx)
+            self._fill_obra(obra)
+        elif obra:
+            self.e_obra.setCurrentText(obra)
+        self.e_obra.blockSignals(False)
+
+        # Empresa faturadora
+        idx_emp = self.e_fat.findText(empresa)
+        if idx_emp >= 0:
+            self.e_fat.setCurrentIndex(idx_emp)
+
+        # Fornecedor
+        self.e_fsel.blockSignals(True)
+        forn_upper = fornecedor.upper()
+        idx_f = self.e_fsel.findText(forn_upper)
+        if idx_f >= 0:
+            self.e_fsel.setCurrentIndex(idx_f)
+            self._fill_forn(forn_upper)
+        else:
+            self.e_fn.setText(forn_upper)
+        self.e_fsel.blockSignals(False)
+
+        # Itens
+        for item in itens:
+            self._add_row()
+            r = self.tabela.rowCount() - 1
+            desc = str(item.get("descricao", "")).strip().upper()
+            it_desc = self.tabela.item(r, 0)
+            if it_desc:
+                it_desc.setText(desc)
+            wq = self.tabela.cellWidget(r, 1)
+            wu = self.tabela.cellWidget(r, 2)
+            wv = self.tabela.cellWidget(r, 3)
+            if wq:
+                wq.setValue(float(item.get("quantidade") or 1))
+            if wu:
+                unid = str(item.get("unidade", "UNID.")).strip().upper()
+                idx_u = wu.findText(unid)
+                if idx_u >= 0:
+                    wu.setCurrentIndex(idx_u)
+            if wv:
+                wv.setValue(float(item.get("valor_unitario") or 0))
+
+        self._recalc()
+
     # ══════════════════════════════════════════════════════════════════════════
     # HELPERS
     # ══════════════════════════════════════════════════════════════════════════
