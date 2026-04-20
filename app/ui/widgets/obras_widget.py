@@ -1,16 +1,8 @@
 """
 app/ui/widgets/obras_widget.py
-
+================================
 Aba "Obras" — gerenciamento completo de obras cadastradas.
-
-FUNCIONALIDADES:
-    - Tabela com todas as obras (do JSON + banco)
-    - Busca em tempo real por nome, escola, cidade
-    - Editar obra (abre diálogo com todos os campos)
-    - Excluir obra com confirmação
-    - Relatório de pedidos por obra: histórico de pedidos,
-      total gasto, fornecedores usados
-    - Card de resumo: total de obras ativas
+CSS e helpers vindos de app.ui.style (sem duplicação).
 """
 
 import os, sys, json, subprocess
@@ -20,98 +12,23 @@ from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
     QTableWidget, QTableWidgetItem, QHeaderView, QMessageBox,
     QLineEdit, QFrame, QGraphicsDropShadowEffect, QDialog,
-    QFormLayout, QDialogButtonBox, QComboBox, QScrollArea,
-    QSplitter, QAbstractItemView,
+    QFormLayout, QDialogButtonBox, QComboBox, QSplitter,
 )
 from PySide6.QtCore import Qt, QTimer
 from PySide6.QtGui import QColor, QFont
 
-# ── Paleta ────────────────────────────────────────────────────────────────────
-RED   = "#C0392B"
-GRAY  = "#2C2C2C"
-WHITE = "#FFFFFF"
-BG    = "#F0EDED"
-BDR   = "#D8CCCC"
-BDR_F = "#C0392B"
-TXT   = "#1A1A1A"
-TXT_S = "#6B5555"
-SEL   = "#FADBD8"
-HOV   = "#FEF0EF"
-GREEN = "#1E8449"
-BLUE  = "#2980B9"
-RO_BG = "#F5F0F0"
+# ── Estilo centralizado ───────────────────────────────────────────────────────
+from app.ui.style import (
+    RED, GRAY, WHITE, BG, BDR, BDR_F, TXT, TXT_S, SEL, HOV, GREEN, BLUE,
+    RO_BG, CSS_INPUT, CSS_COMBO, CSS_BUSCA, CSS_TABLE, CSS_TABLE_SM,
+    CORES_EMPRESA,
+    btn_solid, btn_outline, make_card, card_container,
+)
 
-# ── Caminhos ──────────────────────────────────────────────────────────────────
 _ASSETS = os.path.normpath(
     os.path.join(os.path.dirname(__file__), '..', '..', '..', 'assets')
 )
 _OBR = os.path.join(_ASSETS, 'obras.json')
-
-# ── CSS ───────────────────────────────────────────────────────────────────────
-CSS_INPUT = f"""
-    QLineEdit {{
-        color:{TXT}; background:{WHITE};
-        border:1.5px solid {BDR}; border-radius:5px;
-        padding:4px 10px; font-size:12px; min-height:30px;
-    }}
-    QLineEdit:focus {{ border:1.5px solid {BDR_F}; background:#FFFBFB; }}
-    QLineEdit:read-only {{ color:{TXT_S}; background:{RO_BG}; border:1.5px solid #E8DEDE; }}
-"""
-CSS_COMBO = f"""
-    QComboBox {{
-        color:{TXT}; background:{WHITE};
-        border:1.5px solid {BDR}; border-radius:5px;
-        padding:4px 10px; font-size:12px; min-height:30px;
-    }}
-    QComboBox:focus {{ border:1.5px solid {BDR_F}; }}
-    QComboBox::drop-down {{ border:none; width:22px; background:transparent; }}
-    QComboBox::down-arrow {{
-        width:10px; height:10px;
-        border-left:5px solid transparent; border-right:5px solid transparent;
-        border-top:5px solid {TXT_S}; margin-right:6px;
-    }}
-    QComboBox QAbstractItemView {{
-        color:{TXT}; background:{WHITE}; border:1.5px solid {BDR};
-        selection-background-color:{SEL}; selection-color:{GRAY};
-        font-size:12px;
-    }}
-"""
-CSS_BUSCA = f"""
-    QLineEdit {{
-        color:{TXT}; background:{WHITE};
-        border:1.5px solid {BDR}; border-radius:6px;
-        padding:4px 12px 4px 36px; font-size:12px; min-height:32px;
-    }}
-    QLineEdit:focus {{ border:1.5px solid {RED}; background:#FFFBFB; }}
-"""
-CSS_TABLE = f"""
-    QTableWidget {{
-        background:{WHITE}; border:none;
-        font-size:12px; color:{TXT};
-        selection-background-color:{SEL}; selection-color:{GRAY};
-        outline:none; gridline-color:transparent;
-    }}
-    QTableWidget::item {{
-        padding:0px 12px;
-        border-bottom:1px solid #F0E8E8;
-    }}
-    QTableWidget::item:hover    {{ background:{HOV}; }}
-    QTableWidget::item:selected {{ background:{SEL}; color:{GRAY}; }}
-    QHeaderView {{ background:{WHITE}; }}
-    QHeaderView::section {{
-        background:{WHITE}; color:{TXT_S}; font-size:10px;
-        font-weight:bold; padding:10px 12px;
-        border:none; border-bottom:2px solid #E8DEDE;
-    }}
-    QScrollBar:vertical {{
-        background:transparent; width:6px; border-radius:3px; margin:0;
-    }}
-    QScrollBar::handle:vertical {{
-        background:#D8CCCC; border-radius:3px; min-height:30px;
-    }}
-    QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {{ height:0; }}
-"""
-CSS_TABLE_REL = CSS_TABLE.replace("font-size:12px", "font-size:11px")
 
 
 def _load_json(p):
@@ -124,62 +41,11 @@ def _save_json(p, d):
         json.dump(d, f, ensure_ascii=False, indent=2)
 
 
-def _btn(texto, cor, h=34):
-    b = QPushButton(texto); b.setFixedHeight(h)
-    b.setCursor(Qt.PointingHandCursor)
-    b.setStyleSheet(f"""
-        QPushButton {{
-            background:{cor}; color:white; font-size:11px;
-            font-weight:bold; border-radius:6px; border:none; padding:0 16px;
-        }}
-        QPushButton:hover   {{ background:{cor}DD; }}
-        QPushButton:pressed {{ background:{cor}AA; }}
-    """)
-    return b
-
-def _btn_outline(texto, h=34):
-    b = QPushButton(texto); b.setFixedHeight(h)
-    b.setCursor(Qt.PointingHandCursor)
-    b.setStyleSheet(f"""
-        QPushButton {{
-            background:transparent; color:{TXT_S}; font-size:11px;
-            font-weight:600; border-radius:6px;
-            border:1.5px solid {BDR}; padding:0 14px;
-        }}
-        QPushButton:hover   {{ background:{HOV}; color:{RED}; border-color:{RED}; }}
-        QPushButton:pressed {{ background:{SEL}; }}
-    """)
-    return b
-
-def _card(titulo, valor, cor):
-    card = QFrame(); card.setFixedHeight(72)
-    card.setMinimumWidth(170); card.setMaximumWidth(210)
-    card.setStyleSheet(f"""
-        QFrame {{
-            background:{WHITE}; border-radius:10px;
-            border-left:4px solid {cor};
-            border-top:1px solid #EEE5E5;
-            border-right:1px solid #EEE5E5;
-            border-bottom:1px solid #EEE5E5;
-        }}
-    """)
-    vl = QVBoxLayout(card); vl.setContentsMargins(14,10,14,10); vl.setSpacing(3)
-    lt = QLabel(titulo.upper())
-    lt.setStyleSheet(f"font-size:9px; font-weight:700; color:{TXT_S}; background:transparent; border:none; letter-spacing:1px;")
-    lv = QLabel(str(valor))
-    lv.setStyleSheet(f"font-size:22px; font-weight:bold; color:{cor}; background:transparent; border:none;")
-    lv.setObjectName("card_val")
-    vl.addWidget(lt); vl.addWidget(lv)
-    return card, lv
-
-
 # ══════════════════════════════════════════════════════════════════════════════
 # DIÁLOGO — EDITAR OBRA
 # ══════════════════════════════════════════════════════════════════════════════
 
 class EditarObraDialog(QDialog):
-    """Diálogo para editar os dados de uma obra existente."""
-
     def __init__(self, nome_obra, dados, parent=None):
         super().__init__(parent)
         self.setWindowTitle(f"Editar Obra — {nome_obra}")
@@ -195,30 +61,24 @@ class EditarObraDialog(QDialog):
         def fld(val="", ro=False):
             f = QLineEdit(val); f.setReadOnly(ro); f.setStyleSheet(CSS_INPUT); return f
 
-        # Importa empresas disponíveis
         try:
             from config import EMPRESAS_FATURADORAS
             empresas = list(EMPRESAS_FATURADORAS.keys())
-            _emp_json = os.path.join(_ASSETS, 'empresas_extra.json')
-            extras = _load_json(_emp_json)
-            for e in extras:
-                if e not in empresas: empresas.append(e)
         except Exception:
             empresas = ["BRASUL", "JB", "B&B", "INTERIORANA", "INTERBRAS"]
 
-        self._nome      = fld(nome_obra, ro=True)
-        self._escola    = fld(dados.get("escola", ""))
-        self._fat       = QComboBox(); self._fat.addItems(empresas)
+        self._nome     = fld(nome_obra, ro=True)
+        self._escola   = fld(dados.get("escola", ""))
+        self._fat      = QComboBox(); self._fat.addItems(empresas)
         self._fat.setStyleSheet(CSS_COMBO)
-        fat_atual = dados.get("faturamento", "")
-        idx = self._fat.findText(fat_atual)
+        idx = self._fat.findText(dados.get("faturamento", ""))
         if idx >= 0: self._fat.setCurrentIndex(idx)
-        self._end       = fld(dados.get("endereco", ""))
-        self._bairro    = fld(dados.get("bairro", ""))
-        self._cep       = fld(dados.get("cep", ""))
-        self._cidade    = fld(dados.get("cidade", ""))
-        self._uf        = fld(dados.get("uf", "SP"))
-        self._contrato  = fld(dados.get("contrato", "0"))
+        self._end      = fld(dados.get("endereco", ""))
+        self._bairro   = fld(dados.get("bairro", ""))
+        self._cep      = fld(dados.get("cep", ""))
+        self._cidade   = fld(dados.get("cidade", ""))
+        self._uf       = fld(dados.get("uf", "SP"))
+        self._contrato = fld(dados.get("contrato", "0"))
 
         form.addRow(lbl("Nome da Obra"),         self._nome)
         form.addRow(lbl("Escola / Descrição"),   self._escola)
@@ -241,14 +101,14 @@ class EditarObraDialog(QDialog):
     @property
     def resultado(self):
         return {
-            "escola":    self._escola.text().strip(),
+            "escola":      self._escola.text().strip(),
             "faturamento": self._fat.currentText(),
-            "endereco":  self._end.text().strip(),
-            "bairro":    self._bairro.text().strip(),
-            "cep":       self._cep.text().strip(),
-            "cidade":    self._cidade.text().strip(),
-            "uf":        self._uf.text().strip() or "SP",
-            "contrato":  self._contrato.text().strip() or "0",
+            "endereco":    self._end.text().strip(),
+            "bairro":      self._bairro.text().strip(),
+            "cep":         self._cep.text().strip(),
+            "cidade":      self._cidade.text().strip(),
+            "uf":          self._uf.text().strip() or "SP",
+            "contrato":    self._contrato.text().strip() or "0",
         }
 
 
@@ -257,18 +117,6 @@ class EditarObraDialog(QDialog):
 # ══════════════════════════════════════════════════════════════════════════════
 
 class ObrasWidget(QWidget):
-    """
-    Aba Obras — lista, busca, edita, exclui obras e exibe relatório por obra.
-
-    LAYOUT:
-        ┌─────────────────────────────────────────────────────────┐
-        │  Cabeçalho + Cards                                      │
-        │  Busca                                                  │
-        ├────────────────────────┬────────────────────────────────┤
-        │  Tabela de obras       │  Painel de relatório           │
-        │  (clique para detalhe) │  (pedidos da obra selecionada) │
-        └────────────────────────┴────────────────────────────────┘
-    """
 
     def __init__(self):
         super().__init__()
@@ -277,10 +125,6 @@ class ObrasWidget(QWidget):
         self._pedidos_obra_atual = []
         self._build()
         self._carregar()
-
-    # ══════════════════════════════════════════════════════════════════════════
-    # CONSTRUÇÃO DA INTERFACE
-    # ══════════════════════════════════════════════════════════════════════════
 
     def _build(self):
         self.setStyleSheet(f"background:{BG};")
@@ -297,16 +141,16 @@ class ObrasWidget(QWidget):
         sub.setStyleSheet(f"font-size:11px; color:{TXT_S}; background:transparent;")
         tv.addWidget(titulo); tv.addWidget(sub)
         hl_top.addLayout(tv); hl_top.addStretch()
-        btn_att = _btn("↻  Atualizar", "#95A5A6")
+        btn_att = btn_solid("↻  Atualizar", "#95A5A6")
         btn_att.clicked.connect(self._carregar)
         hl_top.addWidget(btn_att)
         vl.addLayout(hl_top)
 
         # ── Cards ─────────────────────────────────────────────────────────────
         hl_cards = QHBoxLayout(); hl_cards.setSpacing(14)
-        c1, self._lv_total  = _card("Total de Obras", "—", RED)
-        c2, self._lv_cidade = _card("Cidades", "—", BLUE)
-        c3, self._lv_pedidos = _card("Pedidos Emitidos", "—", GREEN)
+        c1, self._lv_total   = make_card("Total de Obras",    "—", RED)
+        c2, self._lv_cidade  = make_card("Cidades",           "—", BLUE)
+        c3, self._lv_pedidos = make_card("Pedidos Emitidos",  "—", GREEN)
         hl_cards.addWidget(c1); hl_cards.addWidget(c2); hl_cards.addWidget(c3)
         hl_cards.addStretch()
         vl.addLayout(hl_cards)
@@ -328,21 +172,18 @@ class ObrasWidget(QWidget):
         hl_busca.addWidget(self._lbl_cont)
         vl.addLayout(hl_busca)
 
-        # ── Splitter: tabela + painel de relatório ────────────────────────────
+        # ── Splitter: tabela + painel de relatório ─────────────────────────────
         splitter = QSplitter(Qt.Horizontal)
         splitter.setStyleSheet("QSplitter::handle { background:#E8DEDE; width:2px; }")
 
-        # Tabela de obras
-        tabela_container = QFrame()
-        tabela_container.setStyleSheet(f"QFrame {{ background:{WHITE}; border-radius:12px; border:1px solid #EEE5E5; }}")
+        tabela_container = card_container()
         sombra1 = QGraphicsDropShadowEffect()
         sombra1.setBlurRadius(16); sombra1.setOffset(0,2); sombra1.setColor(QColor(0,0,0,18))
         tabela_container.setGraphicsEffect(sombra1)
         tcl = QVBoxLayout(tabela_container); tcl.setContentsMargins(0,0,0,0)
 
         self.tabela = QTableWidget(0, 6)
-        self.tabela.setHorizontalHeaderLabels(
-            ["Obra", "Escola", "Cidade", "UF", "Faturamento", "Ações"])
+        self.tabela.setHorizontalHeaderLabels(["Obra", "Escola", "Cidade", "UF", "Faturamento", "Ações"])
         self.tabela.setStyleSheet(CSS_TABLE)
         self.tabela.setSelectionBehavior(QTableWidget.SelectRows)
         self.tabela.setEditTriggers(QTableWidget.NoEditTriggers)
@@ -360,24 +201,19 @@ class ObrasWidget(QWidget):
         tcl.addWidget(self.tabela)
         splitter.addWidget(tabela_container)
 
-        # Painel de relatório (direita)
         self._painel = self._build_painel()
         splitter.addWidget(self._painel)
         splitter.setSizes([650, 400])
-
         vl.addWidget(splitter, 1)
 
     def _build_painel(self):
-        """Painel lateral com relatório da obra selecionada."""
-        painel = QFrame()
-        painel.setStyleSheet(f"QFrame {{ background:{WHITE}; border-radius:12px; border:1px solid #EEE5E5; }}")
+        painel = card_container()
         sombra = QGraphicsDropShadowEffect()
         sombra.setBlurRadius(16); sombra.setOffset(0,2); sombra.setColor(QColor(0,0,0,18))
         painel.setGraphicsEffect(sombra)
 
         vl = QVBoxLayout(painel); vl.setContentsMargins(16,16,16,16); vl.setSpacing(12)
 
-        # Título do painel
         self._lbl_obra_sel = QLabel("← Selecione uma obra")
         self._lbl_obra_sel.setStyleSheet(
             f"font-size:14px; font-weight:bold; color:{GRAY}; background:transparent;")
@@ -388,7 +224,6 @@ class ObrasWidget(QWidget):
         sep.setStyleSheet(f"background:#E8DEDE;"); sep.setFixedHeight(1)
         vl.addWidget(sep)
 
-        # Dados da obra
         self._lbl_dados_obra = QLabel("")
         self._lbl_dados_obra.setStyleSheet(
             f"font-size:11px; color:{TXT_S}; background:transparent; line-height:1.6;")
@@ -399,15 +234,13 @@ class ObrasWidget(QWidget):
         sep2.setStyleSheet(f"background:#E8DEDE;"); sep2.setFixedHeight(1)
         vl.addWidget(sep2)
 
-        # Cards resumo da obra
         hl_resumo = QHBoxLayout(); hl_resumo.setSpacing(8)
-        self._card_npedidos = self._mini_card("Pedidos", "—", RED)
+        self._card_npedidos  = self._mini_card("Pedidos",    "—", RED)
         self._card_total_obra = self._mini_card("Total Gasto", "—", GREEN)
         hl_resumo.addWidget(self._card_npedidos)
         hl_resumo.addWidget(self._card_total_obra)
         vl.addLayout(hl_resumo)
 
-        # Tabela de pedidos da obra
         lbl_ped = QLabel("PEDIDOS EMITIDOS")
         lbl_ped.setStyleSheet(
             f"font-size:9px; font-weight:700; color:{TXT_S}; background:transparent; letter-spacing:1px;")
@@ -415,7 +248,7 @@ class ObrasWidget(QWidget):
 
         self._tabela_pedidos = QTableWidget(0, 4)
         self._tabela_pedidos.setHorizontalHeaderLabels(["Nº", "Data", "Fornecedor", "Total"])
-        self._tabela_pedidos.setStyleSheet(CSS_TABLE_REL)
+        self._tabela_pedidos.setStyleSheet(CSS_TABLE_SM)
         self._tabela_pedidos.setSelectionBehavior(QTableWidget.SelectRows)
         self._tabela_pedidos.setEditTriggers(QTableWidget.NoEditTriggers)
         self._tabela_pedidos.verticalHeader().setVisible(False)
@@ -428,17 +261,15 @@ class ObrasWidget(QWidget):
         hh2.setSectionResizeMode(3, QHeaderView.Fixed); self._tabela_pedidos.setColumnWidth(3, 85)
         vl.addWidget(self._tabela_pedidos, 1)
 
-        # Botão exportar relatório PDF
         sep3 = QFrame(); sep3.setFrameShape(QFrame.HLine)
         sep3.setStyleSheet(f"background:#E8DEDE;"); sep3.setFixedHeight(1)
         vl.addWidget(sep3)
 
-        self._btn_export_xls = _btn("📊  Exportar Excel", GREEN)
+        self._btn_export_xls = btn_solid("📊  Exportar Excel", GREEN)
         self._btn_export_xls.setEnabled(False)
         self._btn_export_xls.setToolTip("Gera Excel com 3 abas: Resumo, Pedidos e Itens")
         self._btn_export_xls.clicked.connect(self._exportar_relatorio_excel)
         vl.addWidget(self._btn_export_xls)
-
         return painel
 
     def _mini_card(self, titulo, valor, cor):
@@ -462,13 +293,11 @@ class ObrasWidget(QWidget):
         return card
 
     # ══════════════════════════════════════════════════════════════════════════
-    # LÓGICA DE DADOS
+    # DADOS
     # ══════════════════════════════════════════════════════════════════════════
 
     def _carregar(self):
         self._obras = _load_json(_OBR)
-
-        # Conta pedidos por obra do banco
         self._pedidos_por_obra = {}
         self._total_por_obra   = {}
         try:
@@ -498,8 +327,7 @@ class ObrasWidget(QWidget):
     def _filtrar(self, texto):
         termo = texto.strip().lower()
         if not termo:
-            self._preencher_tabela(self._obras)
-            return
+            self._preencher_tabela(self._obras); return
         filtradas = {
             k: v for k, v in self._obras.items()
             if termo in k.lower()
@@ -511,13 +339,6 @@ class ObrasWidget(QWidget):
 
     def _preencher_tabela(self, obras):
         self.tabela.setRowCount(0)
-
-        cores_fat = {
-            "BRASUL":     RED,   "JB":         "#A93226",
-            "B&B":        GREEN, "INTERIORANA":"#784212",
-            "INTERBRAS":  "#1A5276",
-        }
-
         for nome, dados in sorted(obras.items()):
             r = self.tabela.rowCount()
             self.tabela.insertRow(r)
@@ -529,26 +350,23 @@ class ObrasWidget(QWidget):
                 it.setBackground(QColor(bg))
                 if bold: f = QFont(); f.setBold(True); it.setFont(f)
                 if cor:  it.setForeground(QColor(cor))
-                it.setData(Qt.UserRole, nome)   # guarda nome da obra
+                it.setData(Qt.UserRole, nome)
                 return it
 
-            fat = dados.get("faturamento","—")
-            cor_fat = cores_fat.get(fat, TXT_S)
+            fat     = dados.get("faturamento", "—")
+            cor_fat = CORES_EMPRESA.get(fat, TXT_S)
 
             self.tabela.setItem(r, 0, _it(nome, bold=True))
             self.tabela.setItem(r, 1, _it(dados.get("escola","—"), cor=TXT_S))
             self.tabela.setItem(r, 2, _it(dados.get("cidade","—"), cor=TXT_S))
-            self.tabela.setItem(r, 3, _it(dados.get("uf","SP"),
-                Qt.AlignVCenter|Qt.AlignCenter, cor=TXT_S))
-            self.tabela.setItem(r, 4, _it(fat,
-                Qt.AlignVCenter|Qt.AlignCenter, bold=True, cor=cor_fat))
+            self.tabela.setItem(r, 3, _it(dados.get("uf","SP"), Qt.AlignVCenter|Qt.AlignCenter, cor=TXT_S))
+            self.tabela.setItem(r, 4, _it(fat, Qt.AlignVCenter|Qt.AlignCenter, bold=True, cor=cor_fat))
 
-            # Botões Editar / Excluir
             cell = QWidget(); cell.setStyleSheet(f"background:{bg};")
             hl = QHBoxLayout(cell); hl.setContentsMargins(6,6,6,6); hl.setSpacing(6)
-            be = _btn("✏ Editar", BLUE, h=30)
+            be = btn_solid("✏ Editar", BLUE, h=30)
             be.clicked.connect(lambda _, n=nome: self._editar(n))
-            bx = _btn("🗑", "#E74C3C", h=30); bx.setFixedWidth(34)
+            bx = btn_solid("🗑", "#E74C3C", h=30); bx.setFixedWidth(34)
             bx.setToolTip(f"Excluir obra '{nome}'")
             bx.clicked.connect(lambda _, n=nome: self._excluir(n))
             hl.addWidget(be); hl.addWidget(bx)
@@ -556,7 +374,6 @@ class ObrasWidget(QWidget):
 
         total = len(obras)
         self._lbl_cont.setText(f"{total} obra{'s' if total!=1 else ''}")
-
         if total == 0:
             self.tabela.setRowCount(1); self.tabela.setSpan(0,0,1,6)
             it = QTableWidgetItem("Nenhuma obra encontrada.")
@@ -568,32 +385,26 @@ class ObrasWidget(QWidget):
     # ══════════════════════════════════════════════════════════════════════════
 
     def _on_selecao(self):
-        """Atualiza o painel lateral com os dados da obra selecionada."""
         rows = self.tabela.selectedItems()
-        if not rows:
-            return
+        if not rows: return
         nome = rows[0].data(Qt.UserRole)
-        if not nome:
-            return
-        self._mostrar_relatorio(nome)
+        if nome: self._mostrar_relatorio(nome)
 
     def _mostrar_relatorio(self, nome_obra):
         dados = self._obras.get(nome_obra, {})
-
         self._lbl_obra_sel.setText(f"📍 {nome_obra}")
         self._btn_export_xls.setEnabled(True)
         self._obra_atual = nome_obra
 
         info = []
-        if dados.get("escola"):     info.append(f"🏫  {dados['escola']}")
-        if dados.get("endereco"):   info.append(f"📌  {dados['endereco']}")
-        if dados.get("cidade"):     info.append(f"🏙  {dados['cidade']} — {dados.get('uf','SP')}")
-        if dados.get("cep"):        info.append(f"CEP: {dados['cep']}")
-        if dados.get("contrato"):   info.append(f"Contrato Nº: {dados['contrato']}")
-        if dados.get("faturamento"):info.append(f"Faturamento: {dados['faturamento']}")
+        if dados.get("escola"):      info.append(f"🏫  {dados['escola']}")
+        if dados.get("endereco"):    info.append(f"📌  {dados['endereco']}")
+        if dados.get("cidade"):      info.append(f"🏙  {dados['cidade']} — {dados.get('uf','SP')}")
+        if dados.get("cep"):         info.append(f"CEP: {dados['cep']}")
+        if dados.get("contrato"):    info.append(f"Contrato Nº: {dados['contrato']}")
+        if dados.get("faturamento"): info.append(f"Faturamento: {dados['faturamento']}")
         self._lbl_dados_obra.setText("\n".join(info) if info else "Sem dados cadastrados.")
 
-        # Busca pedidos desta obra no banco
         pedidos = []
         try:
             from app.data.database import get_connection
@@ -606,18 +417,16 @@ class ObrasWidget(QWidget):
         except Exception as e:
             print(f"[ObrasWidget] relatório: {e}")
 
-        # Mini cards
         def _vt(p):
             try: v = p["valor_total"]; return float(v) if v is not None else 0.0
             except: return 0.0
+
         total_gasto = sum(_vt(p) for p in pedidos)
         for lv in self._card_npedidos.findChildren(QLabel):
             if lv.objectName() == "mini_val": lv.setText(str(len(pedidos)))
         for lv in self._card_total_obra.findChildren(QLabel):
-            if lv.objectName() == "mini_val":
-                lv.setText(f"R$ {self._fmt(total_gasto)}")
+            if lv.objectName() == "mini_val": lv.setText(f"R$ {self._fmt(total_gasto)}")
 
-        # Tabela de pedidos
         self._tabela_pedidos.setRowCount(0)
         for p in pedidos:
             r = self._tabela_pedidos.rowCount()
@@ -635,17 +444,13 @@ class ObrasWidget(QWidget):
             def _pf(key, default="—"):
                 try: v = p[key]; return str(v) if v is not None else default
                 except: return default
-            self._tabela_pedidos.setItem(r, 0, _it2(
-                f"#{_pf('numero','?')}", Qt.AlignVCenter|Qt.AlignCenter, cor=RED, bold=True))
-            self._tabela_pedidos.setItem(r, 1, _it2(
-                _pf("data_pedido"), Qt.AlignVCenter|Qt.AlignCenter, cor=TXT_S))
+
+            self._tabela_pedidos.setItem(r, 0, _it2(f"#{_pf('numero','?')}", Qt.AlignVCenter|Qt.AlignCenter, cor=RED, bold=True))
+            self._tabela_pedidos.setItem(r, 1, _it2(_pf("data_pedido"), Qt.AlignVCenter|Qt.AlignCenter, cor=TXT_S))
             self._tabela_pedidos.setItem(r, 2, _it2(_pf("fornecedor_nome"), cor=TXT_S))
-            self._tabela_pedidos.setItem(r, 3, _it2(
-                f"R$ {self._fmt(_vt(p))}",
-                Qt.AlignVCenter|Qt.AlignRight, cor=GRAY, bold=True))
+            self._tabela_pedidos.setItem(r, 3, _it2(f"R$ {self._fmt(_vt(p))}", Qt.AlignVCenter|Qt.AlignRight, cor=GRAY, bold=True))
 
         self._pedidos_obra_atual = list(pedidos)
-
         if not pedidos:
             self._tabela_pedidos.setRowCount(1); self._tabela_pedidos.setSpan(0,0,1,4)
             it = QTableWidgetItem("Nenhum pedido emitido para esta obra.")
@@ -659,8 +464,7 @@ class ObrasWidget(QWidget):
     def _editar(self, nome_obra):
         dados = self._obras.get(nome_obra, {})
         dlg = EditarObraDialog(nome_obra, dados, self)
-        if dlg.exec() != QDialog.Accepted:
-            return
+        if dlg.exec() != QDialog.Accepted: return
         self._obras[nome_obra] = dlg.resultado
         _save_json(_OBR, self._obras)
         self._carregar()
@@ -672,31 +476,24 @@ class ObrasWidget(QWidget):
             f"Deseja realmente excluir a obra:\n\n'{nome_obra}'?\n\n"
             f"Os pedidos desta obra no banco de dados NÃO serão apagados.",
             QMessageBox.Yes | QMessageBox.No, QMessageBox.No)
-        if resp != QMessageBox.Yes:
-            return
+        if resp != QMessageBox.Yes: return
         if nome_obra in self._obras:
             del self._obras[nome_obra]
             _save_json(_OBR, self._obras)
             self._carregar()
-            # Limpa o painel se a obra excluída estava selecionada
             self._lbl_obra_sel.setText("← Selecione uma obra")
             self._lbl_dados_obra.setText("")
             self._tabela_pedidos.setRowCount(0)
-            QMessageBox.information(self, "Removida",
-                f"Obra '{nome_obra}' removida do cadastro.")
-
+            QMessageBox.information(self, "Removida", f"Obra '{nome_obra}' removida do cadastro.")
 
     def _exportar_relatorio_excel(self):
-        """Gera Excel de auditoria com 3 abas: Resumo, Pedidos, Itens."""
-        if not self._obra_atual:
-            return
+        if not self._obra_atual: return
         from PySide6.QtWidgets import QFileDialog
         from datetime import datetime as _dt
         nome_obra = self._obra_atual
         dados     = self._obras.get(nome_obra, {})
         pedidos   = self._pedidos_obra_atual
 
-        # Busca itens do banco
         itens_por_pedido = {}
         try:
             from app.data.database import get_connection
@@ -711,8 +508,7 @@ class ObrasWidget(QWidget):
                 """, (nome_obra,)).fetchall()
                 for row in rows:
                     num = str(row["numero"])
-                    if num not in itens_por_pedido:
-                        itens_por_pedido[num] = []
+                    if num not in itens_por_pedido: itens_por_pedido[num] = []
                     itens_por_pedido[num].append(row)
         except Exception as e:
             print(f"[Excel] itens: {e}")
@@ -725,8 +521,7 @@ class ObrasWidget(QWidget):
 
         caminho, _ = QFileDialog.getSaveFileName(
             self, "Salvar Relatório Excel", sugestao, "Excel (*.xlsx)")
-        if not caminho:
-            return
+        if not caminho: return
 
         try:
             from app.ui.widgets.relatorio_obra_excel import gerar_excel
@@ -748,7 +543,6 @@ class ObrasWidget(QWidget):
             QMessageBox.critical(self, "Erro", "Arquivo já está aberto. Feche e tente novamente.")
         except Exception as e:
             QMessageBox.critical(self, "Erro ao gerar Excel", str(e))
-
 
     @staticmethod
     def _fmt(v):

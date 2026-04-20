@@ -38,6 +38,11 @@ class MainWindow(QMainWindow):
         self.setMinimumSize(1100, 700)
         self.resize(1300, 820)
         self._build()
+        from PySide6.QtGui import QIcon
+        import os
+        _ICO = os.path.normpath(os.path.join(_HERE, '..', '..', 'assets', 'iconebrasul2.ico'))
+        if os.path.exists(_ICO):
+            self.setWindowIcon(QIcon(_ICO))
 
     def _build(self):
         root = QWidget()
