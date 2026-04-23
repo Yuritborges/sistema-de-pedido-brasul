@@ -103,5 +103,12 @@ class PedidoService:
                     ))
 
         except Exception as e:
-            # Não cancela o PDF por erro no banco
             print(f"[DB] Aviso ao salvar pedido: {e}")
+            return
+
+        # Sincroniza com a rede após salvar (silencioso se rede cair)
+        try:
+            from app.data.database import sincronizar_com_rede
+            sincronizar_com_rede(silencioso=True)
+        except Exception:
+            pass

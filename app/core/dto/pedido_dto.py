@@ -80,8 +80,19 @@ class PedidoDTO:
     def estimativa_vencimento(self):
         from datetime import datetime, timedelta
         try:
+            # pega o primeiro prazo (ex: "28/42" → 28)
             primeiro = int(self.condicao_pagamento.split("/")[0])
-            dt = datetime.strptime(self.data_pedido, "%d/%m/%Y")
-            return (dt + timedelta(days=primeiro)).strftime("%d/%m/%y")
+
+            # usa a data prevista de entrega como base
+            data_base = self.data_prevista_entrega
+
+            for fmt in ("%d/%m/%y", "%d/%m/%Y"):
+                try:
+                    dt = datetime.strptime(data_base, fmt)
+                    return (dt + timedelta(days=primeiro)).strftime("%d/%m/%y")
+                except ValueError:
+                    continue
+
+            return ""
         except Exception:
             return ""

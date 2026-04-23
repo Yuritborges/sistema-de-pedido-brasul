@@ -15,7 +15,7 @@ from app.ui.widgets.obras_widget      import ObrasWidget
 from app.ui.widgets.cotacao_widget    import CotacaoWidget
 from app.ui.widgets.historico_widget  import HistoricoWidget
 from app.ui.widgets.pedidos_widget    import PedidosWidget
-
+from app.ui.widgets.consulta_patrao_widget import ConsultaPatraoWidget
 _HERE = os.path.dirname(os.path.abspath(__file__))
 
 # Cores da sidebar

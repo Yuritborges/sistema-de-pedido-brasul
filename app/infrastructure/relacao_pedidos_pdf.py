@@ -2,6 +2,7 @@
 # Gera o PDF da Relação de Pedidos para o financeiro.
 import os
 from datetime import date, datetime
+
 from reportlab.lib.pagesizes import A4, landscape
 from reportlab.lib.units import mm
 from reportlab.lib import colors
@@ -11,6 +12,8 @@ from reportlab.platypus import (
 )
 from reportlab.lib.styles import ParagraphStyle
 from reportlab.lib.enums import TA_LEFT, TA_CENTER, TA_RIGHT
+
+from app.data.database import copiar_arquivo_para_rede
 
 # ── Paleta ────────────────────────────────────────────────────────────────────
 C_VERMELHO  = colors.HexColor("#C0392B")
@@ -54,9 +57,13 @@ def _fmt_val_num(v):
         return 0.0
 
 
-def gerar_relacao_pdf(caminho: str, pedidos: list, data_ref: date,
-                      comprador: str = "",
-                      agrupar_por_empresa: bool = True) -> str:
+def gerar_relacao_pdf(
+    caminho: str,
+    pedidos: list,
+    data_ref: date,
+    comprador: str = "",
+    agrupar_por_empresa: bool = True
+) -> str:
     """
     Gera o PDF da Relação de Pedidos.
 
@@ -77,22 +84,30 @@ def gerar_relacao_pdf(caminho: str, pedidos: list, data_ref: date,
     doc = SimpleDocTemplate(
         caminho,
         pagesize=landscape(A4),
-        leftMargin=14 * mm, rightMargin=14 * mm,
-        topMargin=12 * mm, bottomMargin=12 * mm,
+        leftMargin=9 * mm,
+        rightMargin=9 * mm,
+        topMargin=8 * mm,
+        bottomMargin=8 * mm,
         title=f"Relação de Pedidos — {data_ref.strftime('%d/%m/%Y')}",
     )
 
     story = []
     story += _cabecalho(data_ref, len(pedidos), comprador)
-    story.append(Spacer(1, 4 * mm))
+    story.append(Spacer(1, 2 * mm))
 
     if not pedidos:
         story.append(Paragraph(
             "Nenhum pedido encontrado para esta data.",
-            ParagraphStyle("vazio", fontSize=11, textColor=C_CLARO,
-                           alignment=TA_CENTER)
+            ParagraphStyle(
+                "vazio",
+                fontSize=10,
+                textColor=C_CLARO,
+                alignment=TA_CENTER,
+                leading=12
+            )
         ))
         doc.build(story)
+        copiar_arquivo_para_rede(caminho, "relações")
         return caminho
 
     if agrupar_por_empresa:
@@ -101,18 +116,32 @@ def gerar_relacao_pdf(caminho: str, pedidos: list, data_ref: date,
         story += _tabela_simples(pedidos)
 
     # Rodapé de emissão
-    story.append(Spacer(1, 6 * mm))
-    story.append(HRFlowable(width="100%", thickness=0.5,
-                             color=C_LINHA, spaceAfter=3 * mm))
+    story.append(Spacer(1, 3 * mm))
+    story.append(HRFlowable(
+        width="100%",
+        thickness=0.5,
+        color=C_LINHA,
+        spaceAfter=1.5 * mm
+    ))
+
     comp_str = f" | Comprador: {comprador}" if comprador else ""
     story.append(Paragraph(
         f"Emitido em {datetime.now().strftime('%d/%m/%Y às %H:%M')}"
         f"{comp_str} — Sistema de Pedidos Brasul Construtora",
-        ParagraphStyle("rodape", fontSize=7, textColor=C_CLARO,
-                       alignment=TA_CENTER)
+        ParagraphStyle(
+            "rodape",
+            fontSize=6,
+            textColor=C_CLARO,
+            alignment=TA_CENTER,
+            leading=8
+        )
     ))
 
     doc.build(story, onFirstPage=_numerar_pagina, onLaterPages=_numerar_pagina)
+
+    # Copiar também para a rede
+    copiar_arquivo_para_rede(caminho, "relações")
+
     return caminho
 
 
@@ -120,59 +149,74 @@ def gerar_relacao_pdf(caminho: str, pedidos: list, data_ref: date,
 
 def _cabecalho(data_ref: date, total: int, comprador: str = "") -> list:
     elems = []
-    W_PAGE = landscape(A4)[0] - 28 * mm
+    w_page = landscape(A4)[0] - 18 * mm  # compensando margens menores
 
     titulo_style = ParagraphStyle(
-        "titulo", fontSize=16, textColor=C_ESCURO,
-        fontName="Helvetica-Bold", leading=20
+        "titulo",
+        fontSize=14,
+        textColor=C_ESCURO,
+        fontName="Helvetica-Bold",
+        leading=16
     )
     sub_style = ParagraphStyle(
-        "sub", fontSize=9, textColor=C_CLARO,
-        fontName="Helvetica", leading=12
+        "sub",
+        fontSize=8,
+        textColor=C_CLARO,
+        fontName="Helvetica",
+        leading=10
     )
     info_style = ParagraphStyle(
-        "info", fontSize=10, textColor=C_ESCURO,
-        fontName="Helvetica-Bold", alignment=TA_RIGHT, leading=14
+        "info",
+        fontSize=9,
+        textColor=C_ESCURO,
+        fontName="Helvetica-Bold",
+        alignment=TA_RIGHT,
+        leading=11
     )
     info_sub_style = ParagraphStyle(
-        "info_sub", fontSize=8, textColor=C_CLARO,
-        fontName="Helvetica", alignment=TA_RIGHT, leading=11
+        "info_sub",
+        fontSize=7,
+        textColor=C_CLARO,
+        fontName="Helvetica",
+        alignment=TA_RIGHT,
+        leading=9
     )
     comp_style = ParagraphStyle(
-        "comp", fontSize=9, textColor=C_VERMELHO,
-        fontName="Helvetica-Bold", alignment=TA_RIGHT, leading=12
+        "comp",
+        fontSize=8,
+        textColor=C_VERMELHO,
+        fontName="Helvetica-Bold",
+        alignment=TA_RIGHT,
+        leading=10
     )
 
-    data_str   = data_ref.strftime("%d/%m/%Y")
-    dia_semana = ["Segunda", "Terça", "Quarta", "Quinta",
-                  "Sexta", "Sábado", "Domingo"][data_ref.weekday()]
+    data_str = data_ref.strftime("%d/%m/%Y")
+    dia_semana = ["Segunda", "Terça", "Quarta", "Quinta", "Sexta", "Sábado", "Domingo"][data_ref.weekday()]
 
     titulo_p = Paragraph("RELAÇÃO DE PEDIDOS EMITIDOS", titulo_style)
-    sub_p    = Paragraph(
-        "Brasul Construtora &amp; Empresas — Para o Financeiro", sub_style)
+    sub_p = Paragraph("Brasul Construtora &amp; Empresas — Para o Financeiro", sub_style)
 
-    data_p  = Paragraph(f"{dia_semana}, {data_str}", info_style)
+    data_p = Paragraph(f"{dia_semana}, {data_str}", info_style)
     total_p = Paragraph(
         f"{total} pedido{'s' if total != 1 else ''} emitido{'s' if total != 1 else ''}",
         info_sub_style
     )
 
-    # Coluna direita: data + total + comprador (se houver)
     col_dir = [data_p, total_p]
     if comprador:
         col_dir.append(Paragraph(f"Comprador: {comprador}", comp_style))
 
-    logo    = _logo_path()
-    col_logo = 35 * mm
+    logo = _logo_path()
+    col_logo = 30 * mm
 
     if logo:
         from reportlab.platypus import Image as RLImage
-        logo_img = RLImage(logo, width=30 * mm, height=20 * mm, kind="proportional")
+        logo_img = RLImage(logo, width=25 * mm, height=16 * mm, kind="proportional")
         hdr_data = [[logo_img, [titulo_p, sub_p], col_dir]]
-        col_w = [col_logo, W_PAGE - col_logo - 52 * mm, 52 * mm]
+        col_w = [col_logo, w_page - col_logo - 48 * mm, 48 * mm]
     else:
         hdr_data = [[[titulo_p, sub_p], col_dir]]
-        col_w = [W_PAGE - 52 * mm, 52 * mm]
+        col_w = [w_page - 48 * mm, 48 * mm]
 
     hdr_tbl = Table(hdr_data, colWidths=col_w)
     hdr_tbl.setStyle(TableStyle([
@@ -182,18 +226,24 @@ def _cabecalho(data_ref: date, total: int, comprador: str = "") -> list:
         ("BOTTOMPADDING", (0, 0), (-1, -1), 0),
         ("TOPPADDING",    (0, 0), (-1, -1), 0),
     ]))
+
     elems.append(hdr_tbl)
-    elems.append(Spacer(1, 3 * mm))
-    elems.append(HRFlowable(width="100%", thickness=2,
-                             color=C_VERMELHO, spaceAfter=2 * mm))
+    elems.append(Spacer(1, 2 * mm))
+    elems.append(HRFlowable(
+        width="100%",
+        thickness=1.5,
+        color=C_VERMELHO,
+        spaceAfter=1.5 * mm
+    ))
     return elems
 
 
-# ── Tabela agrupada por empresa ────────────────────────────────────────────────
+# ── Tabela agrupada por empresa ───────────────────────────────────────────────
 
 def _tabela_agrupada(pedidos: list) -> list:
     elems = []
     grupos = {}
+
     for p in pedidos:
         emp = (p.get("empresa_faturadora") or "—").upper()
         grupos.setdefault(emp, []).append(p)
@@ -203,27 +253,39 @@ def _tabela_agrupada(pedidos: list) -> list:
     for emp, itens in grupos.items():
         cor_emp = CORES_EMP.get(emp, C_ESCURO)
         grp_style = ParagraphStyle(
-            f"grp_{emp}", fontSize=9, textColor=cor_emp,
-            fontName="Helvetica-Bold", leading=12
+            f"grp_{emp}",
+            fontSize=8,
+            textColor=cor_emp,
+            fontName="Helvetica-Bold",
+            leading=10
         )
         subtotal = sum(_fmt_val_num(p.get("valor_total")) for p in itens)
         grp_label = Paragraph(
-            f"{emp}  —  {len(itens)} pedido{'s' if len(itens)!=1 else ''}"
+            f"{emp}  —  {len(itens)} pedido{'s' if len(itens) != 1 else ''}"
             f"  |  Subtotal: {_fmt_val(subtotal)}",
             grp_style
         )
         elems.append(grp_label)
-        elems.append(Spacer(1, 1.5 * mm))
+        elems.append(Spacer(1, 1 * mm))
         elems += _montar_tabela(itens, cor_emp)
-        elems.append(Spacer(1, 5 * mm))
+        elems.append(Spacer(1, 2.5 * mm))
 
-    # Total geral
-    elems.append(HRFlowable(width="100%", thickness=1,
-                             color=C_VERMELHO, spaceAfter=2 * mm))
+    elems.append(HRFlowable(
+        width="100%",
+        thickness=1,
+        color=C_VERMELHO,
+        spaceAfter=1.5 * mm
+    ))
     elems.append(Paragraph(
         f"TOTAL GERAL: {_fmt_val(total_geral)}",
-        ParagraphStyle("total_g", fontSize=11, textColor=C_VERMELHO,
-                       fontName="Helvetica-Bold", alignment=TA_RIGHT)
+        ParagraphStyle(
+            "total_g",
+            fontSize=10,
+            textColor=C_VERMELHO,
+            fontName="Helvetica-Bold",
+            alignment=TA_RIGHT,
+            leading=12
+        )
     ))
     return elems
 
@@ -231,80 +293,134 @@ def _tabela_agrupada(pedidos: list) -> list:
 def _tabela_simples(pedidos: list) -> list:
     total = sum(_fmt_val_num(p.get("valor_total")) for p in pedidos)
     elems = _montar_tabela(pedidos, C_VERMELHO)
-    elems.append(Spacer(1, 3 * mm))
-    elems.append(HRFlowable(width="100%", thickness=1,
-                             color=C_VERMELHO, spaceAfter=2 * mm))
+    elems.append(Spacer(1, 2 * mm))
+    elems.append(HRFlowable(
+        width="100%",
+        thickness=1,
+        color=C_VERMELHO,
+        spaceAfter=1.5 * mm
+    ))
     elems.append(Paragraph(
         f"TOTAL GERAL: {_fmt_val(total)}",
-        ParagraphStyle("total_s", fontSize=11, textColor=C_VERMELHO,
-                       fontName="Helvetica-Bold", alignment=TA_RIGHT)
+        ParagraphStyle(
+            "total_s",
+            fontSize=10,
+            textColor=C_VERMELHO,
+            fontName="Helvetica-Bold",
+            alignment=TA_RIGHT,
+            leading=12
+        )
     ))
     return elems
 
 
-def _montar_tabela(pedidos: list, cor_grupo) -> list:
-    W_PAGE = landscape(A4)[0] - 28 * mm
-    cabecalho = ["Nº PEDIDO", "FORNECEDOR", "OBRA",
-                 "COND. PGTO", "FORMA PGTO", "EMPRESA", "VALOR TOTAL"]
-    col_w = [
-        18 * mm,
-        W_PAGE * 0.22,
-        W_PAGE * 0.28,
-        22 * mm,
-        22 * mm,
-        25 * mm,
-        28 * mm,
+def _montar_tabela(pedidos: list, cor_grupo):
+    w_page = landscape(A4)[0] - 18 * mm
+
+    cabecalho = [
+        "Nº PEDIDO",
+        "FORNECEDOR",
+        "OBRA",
+        "COND. PGTO",
+        "FORMA PGTO",
+        "EMPRESA",
+        "VALOR TOTAL"
     ]
 
-    s_hdr = ParagraphStyle("th",  fontSize=8,  textColor=C_BRANCO,
-                            fontName="Helvetica-Bold", alignment=TA_CENTER, leading=10)
-    s_num = ParagraphStyle("num", fontSize=9,  textColor=cor_grupo,
-                            fontName="Helvetica-Bold", alignment=TA_CENTER, leading=11)
-    s_txt = ParagraphStyle("txt", fontSize=8,  textColor=C_ESCURO,
-                            fontName="Helvetica", leading=10)
-    s_ctr = ParagraphStyle("ctr", fontSize=8,  textColor=C_MEDIO,
-                            fontName="Helvetica", alignment=TA_CENTER, leading=10)
-    s_val = ParagraphStyle("val", fontSize=9,  textColor=C_ESCURO,
-                            fontName="Helvetica-Bold", alignment=TA_RIGHT, leading=11)
+    col_w = [
+        17 * mm,
+        w_page * 0.22,
+        w_page * 0.29,
+        21 * mm,
+        21 * mm,
+        24 * mm,
+        27 * mm,
+    ]
+
+    s_hdr = ParagraphStyle(
+        "th",
+        fontSize=7,
+        textColor=C_BRANCO,
+        fontName="Helvetica-Bold",
+        alignment=TA_CENTER,
+        leading=8
+    )
+    s_num = ParagraphStyle(
+        "num",
+        fontSize=8,
+        textColor=cor_grupo,
+        fontName="Helvetica-Bold",
+        alignment=TA_CENTER,
+        leading=9
+    )
+    s_txt = ParagraphStyle(
+        "txt",
+        fontSize=7,
+        textColor=C_ESCURO,
+        fontName="Helvetica",
+        leading=8
+    )
+    s_ctr = ParagraphStyle(
+        "ctr",
+        fontSize=7,
+        textColor=C_MEDIO,
+        fontName="Helvetica",
+        alignment=TA_CENTER,
+        leading=8
+    )
+    s_val = ParagraphStyle(
+        "val",
+        fontSize=8,
+        textColor=C_ESCURO,
+        fontName="Helvetica-Bold",
+        alignment=TA_RIGHT,
+        leading=9
+    )
 
     rows = [[Paragraph(h, s_hdr) for h in cabecalho]]
 
     for i, p in enumerate(pedidos):
-        emp   = (p.get("empresa_faturadora") or "—").upper()
+        emp = (p.get("empresa_faturadora") or "—").upper()
         cor_e = CORES_EMP.get(emp, C_ESCURO)
+
         s_emp_row = ParagraphStyle(
-            f"emp_{i}", fontSize=8, fontName="Helvetica-Bold",
-            alignment=TA_CENTER, leading=10, textColor=cor_e
+            f"emp_{i}",
+            fontSize=7,
+            fontName="Helvetica-Bold",
+            alignment=TA_CENTER,
+            leading=8,
+            textColor=cor_e
         )
+
         rows.append([
-            Paragraph(f"#{p.get('numero','—')}", s_num),
+            Paragraph(f"#{p.get('numero', '—')}", s_num),
             Paragraph(str(p.get("fornecedor_nome") or p.get("fornecedor") or "—")[:50], s_txt),
-            Paragraph(str(p.get("obra_nome")      or p.get("obra")       or "—")[:60], s_txt),
+            Paragraph(str(p.get("obra_nome") or p.get("obra") or "—")[:60], s_txt),
             Paragraph(str(p.get("condicao_pagamento") or "—"), s_ctr),
-            Paragraph(str(p.get("forma_pagamento")    or "—"), s_ctr),
+            Paragraph(str(p.get("forma_pagamento") or "—"), s_ctr),
             Paragraph(emp, s_emp_row),
             Paragraph(_fmt_val(p.get("valor_total")), s_val),
         ])
 
     tbl = Table(rows, colWidths=col_w, repeatRows=1)
     tbl.setStyle(TableStyle([
-        ("BACKGROUND",   (0, 0), (-1, 0),  C_FUNDO_HDR),
-        ("ROWBACKGROUNDS",(0,1), (-1, -1), [C_BRANCO, C_ALT]),
-        ("GRID",         (0, 0), (-1, -1), 0.3, C_LINHA),
-        ("LINEBELOW",    (0, 0), (-1, 0),  1.5, cor_grupo),
-        ("TOPPADDING",   (0, 0), (-1, -1), 5),
-        ("BOTTOMPADDING",(0, 0), (-1, -1), 5),
-        ("LEFTPADDING",  (0, 0), (-1, -1), 6),
-        ("RIGHTPADDING", (0, 0), (-1, -1), 6),
-        ("VALIGN",       (0, 0), (-1, -1), "MIDDLE"),
+        ("BACKGROUND",    (0, 0), (-1, 0), C_FUNDO_HDR),
+        ("ROWBACKGROUNDS",(0, 1), (-1, -1), [C_BRANCO, C_ALT]),
+        ("GRID",          (0, 0), (-1, -1), 0.3, C_LINHA),
+        ("LINEBELOW",     (0, 0), (-1, 0), 1.2, cor_grupo),
+        ("TOPPADDING",    (0, 0), (-1, -1), 2),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 2),
+        ("LEFTPADDING",   (0, 0), (-1, -1), 4),
+        ("RIGHTPADDING",  (0, 0), (-1, -1), 4),
+        ("VALIGN",        (0, 0), (-1, -1), "MIDDLE"),
     ]))
     return [tbl]
 
 
 def _numerar_pagina(canvas, doc):
     canvas.saveState()
-    W, H = landscape(A4)
-    canvas.setFont("Helvetica", 7)
+    w, _ = landscape(A4)
+    canvas.setFont("Helvetica", 6)
     canvas.setFillColor(C_CLARO)
-    canvas.drawRightString(W - 14 * mm, 8 * mm, f"Página {doc.page}")
+    canvas.drawRightString(w - 9 * mm, 6 * mm, f"Página {doc.page}")
     canvas.restoreState()

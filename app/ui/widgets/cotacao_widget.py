@@ -3,7 +3,7 @@
 import os, json
 from datetime import datetime
 from urllib.parse import quote
-
+from app.data.database import copiar_arquivo_para_rede
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QFrame,
     QTableWidget, QTableWidgetItem, QHeaderView, QLineEdit,
@@ -14,7 +14,7 @@ from PySide6.QtWidgets import (
 )
 from PySide6.QtCore import Qt, QTimer, QUrl
 from PySide6.QtGui import QColor, QFont, QBrush, QDesktopServices
-
+from app.data.database import copiar_arquivo_para_rede
 from app.ui.style import (
     RED, GRAY, WHITE, BG, BDR, TXT, TXT_S, SEL, HOV, GREEN, BLUE,
     CSS_INPUT, CSS_COMBO, CORES_EMPRESA,
@@ -1501,6 +1501,9 @@ class CotacaoWidget(QWidget):
         try:
             with open(caminho, "w", encoding="utf-8") as f:
                 json.dump(dados, f, ensure_ascii=False, indent=2)
+
+            copiar_arquivo_para_rede(caminho, "cotações_salvas")
+
             self._arquivo_cotacao_atual = caminho
             QMessageBox.information(self, "Cotação salva", f"✅ Cotação salva com sucesso.\n\n{caminho}")
         except Exception as e:

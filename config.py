@@ -5,7 +5,7 @@ import os
 
 # Caminhos principais do projeto
 BASE_DIR      = os.path.dirname(os.path.abspath(__file__))
-DATABASE_PATH = os.path.join(BASE_DIR, "database", "cotacao.db")
+DATABASE_PATH = r"Z:\0 OBRAS\brasul_pedidos\Iury\cotacao_iury.db"
 PEDIDOS_DIR   = os.path.join(BASE_DIR, "pedidos_gerados")
 ASSETS_DIR    = os.path.join(BASE_DIR, "assets")
 LOGOS_DIR     = os.path.join(ASSETS_DIR, "logos")
@@ -47,8 +47,8 @@ EMPRESAS_FATURADORAS = {
     },
     "INTERIORANA": {
         "razao_social": "INTERIORANA CONSTRUTORA LTDA",
-        "endereco":     "Avª Mofarrej, 348 – Sala 703 – Vila Leopoldina – São Paulo/SP",
-        "telefone":     "(11) 2892.8916",
+        "endereco":     "Av. Independência, 546 sala 93 – Cidade Alta – Piracicaba, SP - CEP 13419-160",
+        "telefone":     "(11) 3641-9169",
         "email":        "compra2@construtorainteriorana.com.br",
         "logo":         "logo_interiorana.png",
         "obs_padrao":   "NOTA FISCAL DEVE SER FATURADA EM NOME DA EMPRESA\nINTERIORANA CONSTRUTORA LTDA",
@@ -56,7 +56,7 @@ EMPRESAS_FATURADORAS = {
     },
     "INTERBRAS": {
         "razao_social": "CONSÓRCIO INTERBRAS",
-        "endereco":     "São Paulo, SP",
+        "endereco":     "Rua Coronel Jordão, 440, Vila Paiva - São Paulo, SP - CEP 02075-030",
         "telefone":     "(11) 3313-8220",
         "email":        "compras2@brasulconstrutora.com.br",
         "logo":         "logo_interbras.png",
@@ -65,7 +65,7 @@ EMPRESAS_FATURADORAS = {
     },
 }
 
-COMPRADOR_PADRAO = "IURY"
+COMPRADOR_PADRAO = "THAMYRES"
 
 CATEGORIAS_ITEM = [
     "FUNDAÇÃO / ESTRUTURA",

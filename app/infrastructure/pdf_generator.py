@@ -3,24 +3,25 @@ from reportlab.lib.pagesizes import A4
 from reportlab.lib.units import mm
 from reportlab.lib import colors
 from reportlab.pdfgen import canvas as rl_canvas
-
+from app.data.database import copiar_arquivo_para_rede
 from config import EMPRESAS_FATURADORAS, PEDIDOS_DIR
 from app.core.dto.pedido_dto import PedidoDTO
+from app.data.database import copiar_arquivo_para_rede
 
 # ── Dimensões da página A4 ────────────────────────────────────────────────────
 W, H = A4          # largura ≈ 595pt | altura ≈ 842pt
 M    = 14 * mm     # margem lateral esquerda e direita
 CW   = W - 2 * M  # largura útil (conteúdo entre as margens)
 
-# ── Paleta de cores (tons de cinza — aspecto profissional para impressão) ──────
-C_PRETO  = colors.HexColor("#111111")
-C_ESCURO = colors.HexColor("#333333")
-C_MEDIO  = colors.HexColor("#666666")
-C_CLARO  = colors.HexColor("#AAAAAA")
-C_LINHA  = colors.HexColor("#CCCCCC")
-C_FUNDO  = colors.HexColor("#F5F5F5")
+# Paleta otimizada para impressão em P&B — contraste máximo
+C_PRETO  = colors.HexColor("#000000")   # texto principal — preto puro
+C_ESCURO = colors.HexColor("#111111")   # labels e títulos
+C_MEDIO  = colors.HexColor("#444444")   # texto secundário
+C_CLARO  = colors.HexColor("#777777")   # numeração linhas vazias
+C_LINHA  = colors.HexColor("#888888")   # bordas das células — mais escuro
+C_FUNDO  = colors.HexColor("#EEEEEE")   # fundo alternado — mais visível
 C_BRANCO = colors.white
-C_HDR    = colors.HexColor("#222222")
+C_HDR    = colors.HexColor("#000000")   # cabeçalho tabela — preto sólido
 
 # ── Diretório das logos ───────────────────────────────────────────────────────
 _LOGOS_DIR = os.path.normpath(
@@ -107,6 +108,7 @@ class PedidoCompraGenerator:
         c = rl_canvas.Canvas(caminho, pagesize=A4)
         self._gerar_paginas(c, dto, emp)
         c.save()
+        copiar_arquivo_para_rede(caminho, "pdfs de pedidos")
         return caminho
 
     # ══════════════════════════════════════════════════════════════════════════
@@ -267,7 +269,7 @@ class PedidoCompraGenerator:
 
     def _bloco_topo(self, c, dto, emp, y, alt, num_pag=1, total_pag=1):
         """Logo + dados da empresa + número do pedido."""
-        c.setStrokeColor(C_LINHA); c.setLineWidth(0.5)
+        c.setStrokeColor(C_LINHA); c.setLineWidth(0.8)
         c.rect(M, y-alt, CW, alt, fill=0, stroke=1)
 
         LOGO_W = 44*mm; LOGO_H = 22*mm
@@ -328,7 +330,7 @@ class PedidoCompraGenerator:
         Dados do fornecedor — cada campo com label acima e valor abaixo.
         Resolve a sobreposição do layout anterior.
         """
-        c.setStrokeColor(C_LINHA); c.setLineWidth(0.5)
+        c.setStrokeColor(C_LINHA); c.setLineWidth(0.8)
         c.rect(M, y-alt, CW, alt, fill=0, stroke=1)
 
         c.setFillColor(C_FUNDO)
@@ -365,7 +367,7 @@ class PedidoCompraGenerator:
 
     def _bloco_cob(self, c, dto, emp, y, alt):
         """Endereço de cobrança — lê cidade/UF do config.py."""
-        c.setStrokeColor(C_LINHA); c.setLineWidth(0.5)
+        c.setStrokeColor(C_LINHA); c.setLineWidth(0.8)
         c.rect(M, y-alt, CW, alt, fill=0, stroke=1)
 
         # Endereço de cobrança = endereço da empresa faturadora (config.py)
@@ -405,7 +407,7 @@ class PedidoCompraGenerator:
         Bloco de faturamento — condição, forma, prazo e data prevista.
         A obs_padrao da empresa agora fica em _bloco_obs_empresa (quadrado próprio).
         """
-        c.setStrokeColor(C_LINHA); c.setLineWidth(0.5)
+        c.setStrokeColor(C_LINHA); c.setLineWidth(0.8)
         c.rect(M, y-alt, CW, alt, fill=0, stroke=1)
 
         cond  = dto.condicao_pagamento or "—"
@@ -491,7 +493,7 @@ class PedidoCompraGenerator:
 
     def _bloco_ent(self, c, dto, y, alt):
         """Endereço de entrega (obra)."""
-        c.setStrokeColor(C_LINHA); c.setLineWidth(0.5)
+        c.setStrokeColor(C_LINHA); c.setLineWidth(0.8)
         c.rect(M, y-alt, CW, alt, fill=0, stroke=1)
 
         def par(lbl, val, x, yy):
@@ -570,12 +572,12 @@ class PedidoCompraGenerator:
         cols[-1]["w"] = CW - sum(col["w"] for col in cols[:-1])
 
         # Fonte escalonada conforme ROW_H calculado em _gerar_paginas
-        fnt = getattr(self, '_fonte_tabela', 7.5)
+        fnt = getattr(self, '_fonte_tabela', 8.0)
 
         # Cabeçalho da tabela
         c.setFillColor(C_HDR)
         c.rect(M, y-HDR_H, CW, HDR_H, fill=1, stroke=0)
-        c.setFillColor(C_BRANCO); c.setFont("Helvetica-Bold", max(6, fnt-0.5))
+        c.setFillColor(C_BRANCO); c.setFont("Helvetica-Bold", max(7, fnt-0.5))
         x = M
         for col in cols:
             if   col["a"] == "c": c.drawCentredString(x+col["w"]/2, y-HDR_H/2-2, col["h"])
@@ -589,7 +591,7 @@ class PedidoCompraGenerator:
             if i % 2 == 0:
                 c.setFillColor(colors.HexColor("#FAFAFA"))
                 c.rect(M, y-ROW_H, CW, ROW_H, fill=1, stroke=0)
-            c.setStrokeColor(C_LINHA); c.setLineWidth(0.3)
+            c.setStrokeColor(C_LINHA); c.setLineWidth(0.5)
             c.line(M, y-ROW_H, M+CW, y-ROW_H)
 
             if i < len(itens_pagina):
@@ -618,7 +620,7 @@ class PedidoCompraGenerator:
             y -= ROW_H
 
         # Borda externa e divisórias verticais
-        c.setStrokeColor(C_LINHA); c.setLineWidth(0.5)
+        c.setStrokeColor(C_LINHA); c.setLineWidth(1.0)
         c.rect(M, y, CW, y_tab_topo-y, fill=0, stroke=1)
         x = M
         for col in cols[:-1]:
@@ -643,7 +645,7 @@ class PedidoCompraGenerator:
                     c.setFillColor(C_PRETO); c.setFont("Helvetica", 8)
                 c.drawRightString(W-M-33*mm, y-4*mm, lbl)
                 c.drawRightString(W-M-2*mm,  y-4*mm, f"R$ {self._fmt_val(val)}")
-                c.setStrokeColor(C_LINHA); c.setLineWidth(0.3)
+                c.setStrokeColor(C_LINHA); c.setLineWidth(0.8)
                 c.rect(M+CW-larg_tot, y-6*mm, larg_tot, 6*mm, fill=0, stroke=1)
                 y -= 6*mm
 
@@ -657,17 +659,17 @@ class PedidoCompraGenerator:
         c.setStrokeColor(C_LINHA); c.setLineWidth(0.5)
         c.line(M, y, W-M, y)
 
-        c.setFont("Helvetica-Oblique", 7); c.setFillColor(C_ESCURO)
+        c.setFont("Helvetica-Oblique", 7); c.setFillColor(C_PRETO)
         c.drawString(M, y-4*mm,
             "Destacar o endereço e o Nome da obra com o Nº de meu pedido "
             "no campo de Observações.")
-        c.setFont("Helvetica-Bold", 7); c.setFillColor(C_ESCURO)
+        c.setFont("Helvetica-Bold", 7); c.setFillColor(C_PRETO)
         c.drawString(M, y-8.5*mm, "Notas e Boletos encaminha para:")
         c.setFont("Helvetica", 7); c.setFillColor(colors.HexColor("#0055AA"))
         c.drawString(M, y-12.5*mm, "notafiscal@brasulconstrutora.com.br")
         c.drawString(M, y-16.5*mm, "viviane@brasulconstrutora.com.br")
 
-        c.setFont("Helvetica-Bold", 7); c.setFillColor(C_ESCURO)
+        c.setFont("Helvetica-Bold", 7); c.setFillColor(C_PRETO)
         c.drawRightString(W-M, y-4*mm, "Horário de RECEBIMENTO NA OBRA")
         c.setFont("Helvetica", 7)
         c.drawRightString(W-M, y-8.5*mm,

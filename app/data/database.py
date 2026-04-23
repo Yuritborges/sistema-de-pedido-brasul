@@ -1,11 +1,61 @@
 # app/data/database.py
-# Cria e gerencia o banco de dados SQLite do sistema.
+# Banco local com espelho automático por comprador na rede.
+# Modelo:
+# - Iury usa banco local e espelha para:      Z:\0 OBRAS\brasul_pedidos\Iury\cotacao_iury.db
+# - Thamyres usa banco local e espelha para:  Z:\0 OBRAS\brasul_pedidos\Thamyres\cotacao_thamyres.db
+# - Funciona offline: se a rede cair, o sistema continua funcionando localmente.
 
-import sqlite3
 import os
-from config import DATABASE_PATH
+import shutil
+import sqlite3
+from datetime import datetime
+
+from config import DATABASE_PATH, BACKUP_DIR
+
+try:
+    from config import COMPRADOR_PADRAO
+except Exception:
+    COMPRADOR_PADRAO = "IURY"
 
 
+# ============================================================
+# CONFIGURAÇÃO DE REDE
+# ============================================================
+REDE_BASE_DIR = r"Z:\0 OBRAS\brasul_pedidos"
+
+
+def _normalizar_nome_comprador(nome: str) -> str:
+    nome = (nome or "").strip().upper()
+    if nome in ("IURY", "YURI"):
+        return "IURY"
+    if nome == "THAMYRES":
+        return "THAMYRES"
+    return "IURY"
+
+
+def _nome_pasta_comprador(nome: str) -> str:
+    nome = _normalizar_nome_comprador(nome)
+    return "Thamyres" if nome == "THAMYRES" else "Iury"
+
+
+def _nome_arquivo_db_rede(nome: str) -> str:
+    nome = _normalizar_nome_comprador(nome)
+    return "cotacao_thamyres.db" if nome == "THAMYRES" else "cotacao_iury.db"
+
+
+def obter_rede_db_path() -> str:
+    comprador = _normalizar_nome_comprador(COMPRADOR_PADRAO)
+    pasta = _nome_pasta_comprador(comprador)
+    arquivo = _nome_arquivo_db_rede(comprador)
+    return os.path.join(REDE_BASE_DIR, pasta, arquivo)
+
+
+REDE_DB_PATH = obter_rede_db_path()
+
+
+# ============================================================
+# CONEXÃO
+# ============================================================
 def get_connection():
     os.makedirs(os.path.dirname(DATABASE_PATH), exist_ok=True)
     conn = sqlite3.connect(DATABASE_PATH)
@@ -14,9 +64,12 @@ def get_connection():
     return conn
 
 
+# ============================================================
+# INICIALIZAÇÃO DO BANCO
+# ============================================================
 def init_db():
-    # Cria todas as tabelas se ainda não existirem
     os.makedirs(os.path.dirname(DATABASE_PATH), exist_ok=True)
+
     with get_connection() as conn:
         conn.executescript("""
             CREATE TABLE IF NOT EXISTS obras (
@@ -70,7 +123,7 @@ def init_db():
 
             CREATE TABLE IF NOT EXISTS itens_pedido (
                 id             INTEGER PRIMARY KEY AUTOINCREMENT,
-                pedido_id      INTEGER NOT NULL REFERENCES pedidos(id),
+                pedido_id      INTEGER NOT NULL REFERENCES pedidos(id) ON DELETE CASCADE,
                 descricao      TEXT NOT NULL,
                 quantidade     REAL,
                 unidade        TEXT,
@@ -89,7 +142,7 @@ def init_db():
 
             CREATE TABLE IF NOT EXISTS itens_cotacao (
                 id           INTEGER PRIMARY KEY AUTOINCREMENT,
-                cotacao_id   INTEGER NOT NULL REFERENCES cotacoes(id),
+                cotacao_id   INTEGER NOT NULL REFERENCES cotacoes(id) ON DELETE CASCADE,
                 descricao    TEXT NOT NULL,
                 quantidade   REAL,
                 unidade      TEXT,
@@ -108,13 +161,143 @@ def init_db():
 
             INSERT OR IGNORE INTO contador_pedidos (id, ultimo) VALUES (1, 2548);
         """)
+
     print(f"[DB] Banco inicializado: {DATABASE_PATH}")
+    print(f"[REDE] Espelho configurado para: {REDE_DB_PATH}")
+
+    _fazer_backup_se_necessario()
+    sincronizar_com_rede(silencioso=True)
 
 
+# ============================================================
+# CONTADOR DE PEDIDOS
+# ============================================================
 def proximo_numero_pedido():
-    # Pega o próximo número disponível e já incrementa no banco
     with get_connection() as conn:
-        row = conn.execute("SELECT ultimo FROM contador_pedidos WHERE id=1").fetchone()
+        row = conn.execute(
+            "SELECT ultimo FROM contador_pedidos WHERE id = 1"
+        ).fetchone()
+
         proximo = (row["ultimo"] if row else 2548) + 1
-        conn.execute("UPDATE contador_pedidos SET ultimo=? WHERE id=1", (proximo,))
+
+        conn.execute(
+            "UPDATE contador_pedidos SET ultimo = ? WHERE id = 1",
+            (proximo,)
+        )
+
     return str(proximo)
+
+
+def atualizar_numero_pedido(numero):
+    try:
+        n = int(numero)
+        with get_connection() as conn:
+            conn.execute(
+                "UPDATE contador_pedidos SET ultimo = ? WHERE id = 1",
+                (n,)
+            )
+        print(f"[DB] Contador atualizado para {n}")
+    except Exception as e:
+        print(f"[DB] Erro ao atualizar contador: {e}")
+
+
+# ============================================================
+# SINCRONIZAÇÃO PARA A REDE
+# ============================================================
+def sincronizar_com_rede(silencioso=True):
+    """
+    Espelha o banco local para a pasta da rede do comprador atual.
+    Não bloqueia o sistema. Se a rede estiver fora, falha silenciosamente.
+    """
+    if not REDE_DB_PATH:
+        return False
+
+    try:
+        pasta_rede = os.path.dirname(REDE_DB_PATH)
+        os.makedirs(pasta_rede, exist_ok=True)
+
+        if not os.path.exists(DATABASE_PATH):
+            if not silencioso:
+                print("[REDE] Banco local ainda não existe para sincronizar.")
+            return False
+
+        shutil.copy2(DATABASE_PATH, REDE_DB_PATH)
+
+        if not silencioso:
+            print(f"[REDE] Banco espelhado com sucesso em: {REDE_DB_PATH}")
+
+        return True
+
+    except Exception as e:
+        if not silencioso:
+            print(f"[REDE] Aviso ao sincronizar: {e}")
+        return False
+
+
+# ============================================================
+# BACKUP LOCAL
+# ============================================================
+def _fazer_backup_se_necessario():
+    if not os.path.exists(DATABASE_PATH):
+        return
+
+    try:
+        os.makedirs(BACKUP_DIR, exist_ok=True)
+
+        semana = datetime.now().strftime("%Y-W%W")
+        nome = f"cotacao_backup_{semana}.db"
+        caminho = os.path.join(BACKUP_DIR, nome)
+
+        if not os.path.exists(caminho):
+            shutil.copy2(DATABASE_PATH, caminho)
+            print(f"[DB] Backup criado: {caminho}")
+            _limpar_backups_antigos()
+
+    except Exception as e:
+        print(f"[DB] Aviso no backup: {e}")
+
+
+def _limpar_backups_antigos():
+    try:
+        backups = sorted([
+            f for f in os.listdir(BACKUP_DIR)
+            if f.startswith("cotacao_backup_") and f.endswith(".db")
+        ])
+
+        for antigo in backups[:-8]:
+            os.remove(os.path.join(BACKUP_DIR, antigo))
+
+    except Exception:
+        pass
+
+
+# ============================================================
+# APOIO / DIAGNÓSTICO
+# ============================================================
+def info_ambiente_banco():
+    return {
+        "comprador_padrao": _normalizar_nome_comprador(COMPRADOR_PADRAO),
+        "database_local": DATABASE_PATH,
+        "database_rede": REDE_DB_PATH,
+        "rede_base_dir": REDE_BASE_DIR,
+    }
+
+def obter_pasta_rede_usuario():
+    comprador = _normalizar_nome_comprador(COMPRADOR_PADRAO)
+    pasta = _nome_pasta_comprador(comprador)
+    return os.path.join(REDE_BASE_DIR, pasta)
+
+
+def copiar_arquivo_para_rede(caminho_origem, subpasta):
+    try:
+        base = obter_pasta_rede_usuario()
+        destino_dir = os.path.join(base, subpasta)
+        os.makedirs(destino_dir, exist_ok=True)
+
+        nome = os.path.basename(caminho_origem)
+        destino = os.path.join(destino_dir, nome)
+
+        shutil.copy2(caminho_origem, destino)
+        print(f"[REDE] Arquivo copiado: {destino}")
+    except Exception as e:
+        print(f"[REDE] Erro ao copiar arquivo: {e}")

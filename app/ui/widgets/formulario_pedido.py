@@ -701,15 +701,49 @@ class PedidoWidget(QWidget):
         self.e_forma = _combo(FORMAS_PAGAMENTO)
         self.e_forma.setEditable(True); self.e_forma.setInsertPolicy(QComboBox.NoInsert)
         self.e_forma.lineEdit().setStyleSheet(CSS_INPUT)
-        self.e_comprador = _fld(COMPRADOR_PADRAO)
-        hl.addLayout(_col("Nº Pedido",      self.e_num,       110))
-        hl.addLayout(_col("Data",           self.e_data,      110))
-        hl.addLayout(_col("Prazo entrega",  self.e_prazo,     110))
-        hl.addLayout(_col("Condição pagto", self.e_cond,      130))
-        hl.addLayout(_col("Forma pagto",    self.e_forma,     120))
-        hl.addLayout(_col("Comprador",      self.e_comprador, 120))
+        # Comprador — botão que abre o seletor
+        self._comprador_atual = COMPRADOR_PADRAO
+        vl_comp = QVBoxLayout(); vl_comp.setSpacing(4)
+        lbl_comp = QLabel("COMPRADOR")
+        lbl_comp.setStyleSheet(
+            f"font-size:11px;color:{TXT_S};font-weight:600;background:transparent;")
+        self.btn_comprador = QPushButton(f"👤  {COMPRADOR_PADRAO}")
+        self.btn_comprador.setFixedHeight(32)
+        self.btn_comprador.setMinimumWidth(130)
+        self.btn_comprador.setCursor(Qt.PointingHandCursor)
+        self.btn_comprador.setToolTip("Clique para trocar o comprador")
+        self.btn_comprador.setStyleSheet(f"""
+            QPushButton {{
+                background:{WHITE}; color:{TXT};
+                border:1.5px solid {BDR}; border-radius:5px;
+                font-size:12px; font-weight:bold;
+                padding:0 10px; text-align:left;
+            }}
+            QPushButton:hover {{
+                background:#FEF0EF; border-color:{RED}; color:{RED};
+            }}
+            QPushButton:pressed {{ background:{SEL}; }}
+        """)
+        self.btn_comprador.clicked.connect(self._selecionar_comprador)
+        vl_comp.addWidget(lbl_comp)
+        vl_comp.addWidget(self.btn_comprador)
+
+        hl.addLayout(_col("Nº Pedido",      self.e_num,   110))
+        hl.addLayout(_col("Data",           self.e_data,  110))
+        hl.addLayout(_col("Prazo entrega",  self.e_prazo, 110))
+        hl.addLayout(_col("Condição pagto", self.e_cond,  130))
+        hl.addLayout(_col("Forma pagto",    self.e_forma, 120))
+        hl.addLayout(vl_comp)
         hl.addStretch()
         box.setLayout(hl); return box
+
+    def _selecionar_comprador(self):
+        # Abre o seletor de comprador e atualiza o botão
+        from app.ui.dialogs.selecionar_comprador_dialog import SelecionarCompradorDialog
+        dlg = SelecionarCompradorDialog(self, titulo_relatorio="Pedido de Compra")
+        if dlg.exec() and dlg.comprador_selecionado:
+            self._comprador_atual = dlg.comprador_selecionado
+            self.btn_comprador.setText(f"👤  {self._comprador_atual}")
 
     # ── Seção 2: Obra ─────────────────────────────────────────────────────────
 
@@ -1410,65 +1444,7 @@ class PedidoWidget(QWidget):
     # GERAR PDF
     # ══════════════════════════════════════════════════════════════════════════
 
-    def _validar_visual(self):
-        # Destaca campos obrigatórios vazios em vermelho e retorna lista de erros
-        CSS_ERRO = f"""
-            QLineEdit {{
-                color:{TXT}; background:#FFF0F0;
-                border:2px solid {RED}; border-radius:5px;
-                padding:4px 10px; font-size:12px; min-height:30px;
-            }}
-        """
-        CSS_ERRO_COMBO = f"""
-            QComboBox {{
-                color:{TXT}; background:#FFF0F0;
-                border:2px solid {RED}; border-radius:5px;
-                padding:4px 10px; font-size:12px; min-height:30px;
-            }}
-        """
-        erros = []
-
-        # Reseta todos para o estilo normal primeiro
-        for campo in [self.e_num, self.e_obra, self.e_fn]:
-            if hasattr(campo, 'setStyleSheet'):
-                campo.setStyleSheet(CSS_INPUT if isinstance(campo, QLineEdit) else CSS_COMBO)
-
-        # Valida número do pedido
-        if not self.e_num.text().strip():
-            self.e_num.setStyleSheet(CSS_ERRO)
-            erros.append("Número do pedido")
-
-        # Valida obra
-        obra = self.e_obra.currentText().strip()
-        if not obra or obra.startswith("--"):
-            self.e_obra.setStyleSheet(CSS_ERRO_COMBO)
-            erros.append("Obra")
-
-        # Valida fornecedor
-        if not self.e_fn.text().strip():
-            self.e_fn.setStyleSheet(CSS_ERRO)
-            erros.append("Fornecedor")
-
-        # Valida itens
-        tem_item = any(
-            self.tabela.item(r, 0) and self.tabela.item(r, 0).text().strip()
-            for r in range(self.tabela.rowCount())
-        )
-        if not tem_item:
-            erros.append("Itens do pedido (adicione ao menos um)")
-
-        return erros
-
     def _gerar(self, empresa):
-        # Valida visualmente antes de tentar gerar
-        erros = self._validar_visual()
-        if erros:
-            QMessageBox.warning(
-                self, "Campos obrigatórios",
-                "Preencha os campos destacados em vermelho:\n\n• " + "\n• ".join(erros)
-            )
-            return
-
         try:
             dto  = self._montar_dto(empresa)
             path = self._service.gerar_pdf(dto)
@@ -1481,10 +1457,6 @@ class PedidoWidget(QWidget):
             b_open = msg.addButton(" Abrir PDF ", QMessageBox.ActionRole)
             msg.addButton("OK", QMessageBox.AcceptRole); msg.exec()
             if msg.clickedButton() == b_open: self._abrir_arquivo(path)
-            # Reseta estilos dos campos após sucesso
-            for campo in [self.e_num, self.e_fn]:
-                campo.setStyleSheet(CSS_INPUT)
-            self.e_obra.setStyleSheet(CSS_COMBO)
             self.e_num.setText(proximo_numero_pedido())
         except ValueError as e:
             QMessageBox.warning(self,"Campos obrigatórios",str(e))
@@ -1515,7 +1487,7 @@ class PedidoWidget(QWidget):
             numero=self.e_num.text().strip(),
             data_pedido=self.e_data.text(),
             empresa_faturadora=empresa,
-            comprador=self.e_comprador.text(),
+            comprador=self._comprador_atual,
             obra=self.e_obra.currentText(),
             escola=self.e_escola.text(),
             endereco_entrega=self.e_end.text(),
@@ -1553,7 +1525,8 @@ class PedidoWidget(QWidget):
         self.e_data.setText(datetime.now().strftime("%d/%m/%Y"))
         self.e_prazo.setValue(5)
         self.e_cond.setCurrentIndex(0); self.e_forma.setCurrentIndex(0)
-        self.e_comprador.setText(COMPRADOR_PADRAO)
+        self._comprador_atual = COMPRADOR_PADRAO
+        self.btn_comprador.setText(f"👤  {COMPRADOR_PADRAO}")
 
         self.e_obra.blockSignals(True); self.e_obra.setCurrentIndex(0)
         self.e_obra.blockSignals(False)
@@ -1634,6 +1607,7 @@ class PedidoWidget(QWidget):
         # Numero e data atualizados
         self.e_num.setText(proximo_numero_pedido())
         self.e_data.setText(datetime.now().strftime("%d/%m/%Y"))
+        # Mantém o comprador atual selecionado
 
         # Obra
         self.e_obra.blockSignals(True)
