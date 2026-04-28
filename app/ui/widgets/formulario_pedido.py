@@ -17,7 +17,10 @@ from config import (EMPRESAS_FATURADORAS, UNIDADES,
                     CONDICOES_PAGAMENTO, FORMAS_PAGAMENTO, COMPRADOR_PADRAO)
 from app.core.dto.pedido_dto import PedidoDTO, ItemPedidoDTO
 from app.core.services.pedido_service import PedidoService
-from app.data.database import proximo_numero_pedido, incrementar_numero_pedido, atualizar_numero_pedido
+from app.data.database import (
+    proximo_numero_pedido,
+    atualizar_numero_pedido,
+)
 
 # ── Caminhos dos arquivos JSON ─────────────────────────────────────────────────
 _ASSETS = os.path.normpath(
@@ -755,14 +758,17 @@ class PedidoWidget(QWidget):
     def _num_digitado_manualmente(self):
         """
         Chamado quando o usuário edita o campo Nº Pedido e sai dele.
-        Atualiza o contador do banco para que o próximo número seja
-        o digitado + 1 — sem avançar automaticamente sem motivo.
+        Não altera contador aqui: o contador só deve mudar após gerar
+        um pedido com sucesso.
         """
+        texto = self.e_num.text().strip()
+        if not texto:
+            self.e_num.setText(proximo_numero_pedido())
+            return
         try:
-            n = int(self.e_num.text().strip())
-            atualizar_numero_pedido(n - 1)  # salva n-1 para que proximo = n
+            int(texto)
         except Exception:
-            pass
+            self.e_num.setText(proximo_numero_pedido())
 
     # ── Seção 2: Obra ─────────────────────────────────────────────────────────
 
@@ -1857,12 +1863,15 @@ class PedidoWidget(QWidget):
             dto = self._montar_dto(empresa)
             path = self._service.gerar_pdf(dto)
 
-            # Avança o contador baseado no número que foi realmente gerado
-            # (seja o automático ou o que o usuário digitou manualmente)
-            try:
-                atualizar_numero_pedido(int(dto.numero))
-            except Exception:
-                incrementar_numero_pedido()
+            numero_gerado = str(dto.numero).strip()
+            numero_em_edicao = str(self._pedido_editando_numero or "").strip()
+
+            # Trava de edição:
+            # - Se estiver regravando o mesmo pedido carregado para edição,
+            #   não altera a sequência global.
+            # - Se mudou o número (ou não está em modo edição), atualiza o contador.
+            if not numero_em_edicao or numero_gerado != numero_em_edicao:
+                atualizar_numero_pedido(numero_gerado)
 
             msg = QMessageBox(self)
             msg.setWindowTitle("Pedido gerado!")
@@ -1879,6 +1888,7 @@ class PedidoWidget(QWidget):
                 self._abrir_arquivo(path)
 
             self._arquivo_pedido_atual = None
+            self._pedido_editando_numero = None
             self.e_num.setText(proximo_numero_pedido())
 
         except ValueError as e:
@@ -1995,6 +2005,7 @@ class PedidoWidget(QWidget):
         self._set_tipo_desconto("%")
 
         self.e_obs.clear(); self.lbl_obs_padrao.setVisible(False)
+        self._pedido_editando_numero = None
 
     # ══════════════════════════════════════════════════════════════════════════
     # INTEGRAÇÃO COTAÇÃO → PEDIDO (Sprint 3)

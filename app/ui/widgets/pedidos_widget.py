@@ -439,7 +439,8 @@ class PedidosWidget(QWidget):
             resultado = [r for r in resultado if r["data"].date() == hoje]
         elif self._filtro_ativo == "semana":
             inicio = hoje - timedelta(days=hoje.weekday())
-            resultado = [r for r in resultado if r["data"].date() >= inicio]
+            fim = inicio + timedelta(days=6)
+            resultado = [r for r in resultado if inicio <= r["data"].date() <= fim]
         elif self._filtro_ativo == "mes":
             resultado = [r for r in resultado if
                          r["data"].year == hoje.year and r["data"].month == hoje.month]

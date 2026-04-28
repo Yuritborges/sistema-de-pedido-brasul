@@ -202,6 +202,27 @@ def atualizar_numero_pedido(numero):
         print(f"[DB] Erro ao atualizar contador: {e}")
 
 
+def atualizar_numero_pedido_se_maior(numero):
+    """
+    Atualiza o contador apenas se o número informado for maior que o atual.
+    Evita regressão ao regerar pedidos antigos.
+    """
+    try:
+        n = int(numero)
+        with get_connection() as conn:
+            conn.execute(
+                """
+                UPDATE contador_pedidos
+                   SET ultimo = CASE WHEN ultimo < ? THEN ? ELSE ultimo END
+                 WHERE id = 1
+                """,
+                (n, n)
+            )
+        print(f"[DB] Contador verificado com base no pedido {n}")
+    except Exception as e:
+        print(f"[DB] Erro ao atualizar contador (se maior): {e}")
+
+
 # ============================================================
 # SINCRONIZAÇÃO PARA A REDE
 # ============================================================
